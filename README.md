@@ -1,2 +1,2 @@
 # ReturnOneFileRoblox
-Script: loadstring(game:HttpGet("raw.githubusercontent.com/xX3lixXDD/ReturnOneFileRoblox/refs/heads/main/ReturnOneFile.lua"))()
+Script: loadstring(game:HttpGet("https://raw.githubusercontent.com/xX3lixXDD/ReturnOneFileRoblox/main/ReturnOneFile.lua"))()
