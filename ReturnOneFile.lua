@@ -1,42 +1,94 @@
 -- ReturnOneFile by: xX_3lixXDD
 -- LocalScript
--- ميزات:
--- 1) GUI قابل للسحب (Desktop + Mobile)
--- 2) حفظ CFrame أو حفظ الـ Part تحت اللاعب (Block under player) عبر Raycast
--- 3) يستمع لأجزاء ReturnArea/ReturnAreas ويُعيد اللاعب عند اللمس
--- 4) زر "Teleport Now" و "Clear"
--- 5) زِرّان: إغلاق وتصغير، مع مؤثر صوتي عند الضغط
 
+-- ✅ الخدمات
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
-local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- حالات محفوظة
+-- ✅ متغيرات
 local savedCFrame = nil
 local savedPart = nil
 local touchedDebounces = {}
 
--- ====== UI ======
+-- ✅ واجهة المستخدم
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ReturnGuiSingle"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
+-- ✅ إشعار وهمي مثل إشعار طلب صداقة
+do
+	local fakeNotif = Instance.new("Frame")
+	fakeNotif.Size = UDim2.new(0, 300, 0, 60)
+	fakeNotif.Position = UDim2.new(1, -320, 1, -100)
+	fakeNotif.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	fakeNotif.BorderSizePixel = 0
+	fakeNotif.Name = "FakeNotification"
+	fakeNotif.AnchorPoint = Vector2.new(0, 1)
+	fakeNotif.Parent = screenGui
+
+	local icon = Instance.new("ImageLabel")
+	icon.Size = UDim2.new(0, 50, 0, 50)
+	icon.Position = UDim2.new(0, 5, 0, 5)
+	icon.Image = "rbxasset://textures/ui/dialog_icon_friend.png"
+	icon.BackgroundTransparency = 1
+	icon.Parent = fakeNotif
+
+	local notifText = Instance.new("TextLabel")
+	notifText.Size = UDim2.new(1, -60, 1, -20)
+	notifText.Position = UDim2.new(0, 60, 0, 5)
+	notifText.Text = "ReturnOneFile by: xX_3lixXDD"
+	notifText.Font = Enum.Font.SourceSansBold
+	notifText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	notifText.TextSize = 18
+	notifText.TextXAlignment = Enum.TextXAlignment.Left
+	notifText.BackgroundTransparency = 1
+	notifText.Parent = fakeNotif
+
+	local closeNotif = Instance.new("TextButton")
+	closeNotif.Size = UDim2.new(0, 20, 0, 20)
+	closeNotif.Position = UDim2.new(1, -25, 0, 5)
+	closeNotif.Text = "X"
+	closeNotif.TextColor3 = Color3.fromRGB(255,255,255)
+	closeNotif.BackgroundColor3 = Color3.fromRGB(200,0,0)
+	closeNotif.Font = Enum.Font.SourceSansBold
+	closeNotif.TextSize = 14
+	closeNotif.Parent = fakeNotif
+
+	-- 🎵 صوت عند ظهور الإشعار
+	local notifSound = Instance.new("Sound")
+	notifSound.SoundId = "rbxassetid://9118823103" -- صوت إشعار جميل
+	notifSound.Volume = 1
+	notifSound.Parent = fakeNotif
+	notifSound:Play()
+
+	closeNotif.MouseButton1Click:Connect(function()
+		fakeNotif:Destroy()
+	end)
+
+	task.delay(10, function()
+		if fakeNotif and fakeNotif.Parent then
+			fakeNotif:Destroy()
+		end
+	end)
+end
+
+-- ✅ إنشاء إطار البرنامج
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 320, 0, 180)
 frame.Position = UDim2.new(0, 20, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(34,34,34)
 frame.BorderSizePixel = 0
-frame.AnchorPoint = Vector2.new(0,0)
 frame.Active = true
+frame.Draggable = true
 frame.Parent = screenGui
 
--- العنوان
+-- ✅ عنوان السكربت
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -16, 0, 30)
 title.Position = UDim2.new(0, 8, 0, 8)
@@ -48,7 +100,17 @@ title.TextSize = 18
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = frame
 
--- زر الإغلاق (X) باللون الأحمر
+-- ✅ صوت النقر
+local clickSound = Instance.new("Sound")
+clickSound.SoundId = "rbxassetid://2101148"
+clickSound.Volume = 0.8
+clickSound.Parent = frame
+
+local function playClick()
+	clickSound:Play()
+end
+
+-- ✅ أزرار التحكم
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 24, 0, 24)
 closeBtn.Position = UDim2.new(1, -28, 0, 8)
@@ -59,7 +121,6 @@ closeBtn.Font = Enum.Font.SourceSansBold
 closeBtn.TextSize = 18
 closeBtn.Parent = frame
 
--- زر التصغير (-) باللون الأحمر
 local minimizeBtn = Instance.new("TextButton")
 minimizeBtn.Size = UDim2.new(0, 24, 0, 24)
 minimizeBtn.Position = UDim2.new(1, -56, 0, 8)
@@ -70,7 +131,7 @@ minimizeBtn.Font = Enum.Font.SourceSansBold
 minimizeBtn.TextSize = 18
 minimizeBtn.Parent = frame
 
--- الأزرار الأساسية
+-- ✅ أزرار التحكم في الإرجاع
 local setBtn = Instance.new("TextButton")
 setBtn.Size = UDim2.new(0, 150, 0, 36)
 setBtn.Position = UDim2.new(0, 8, 0, 48)
@@ -122,35 +183,23 @@ infoLabel.TextSize = 15
 infoLabel.TextXAlignment = Enum.TextXAlignment.Left
 infoLabel.Parent = frame
 
--- ====== مؤثر الصوت ======
-local clickSound = Instance.new("Sound")
-clickSound.SoundId = "rbxassetid://2101148"  -- مثال: صوت نقر بسيط (يمكن تغييره)
-clickSound.Volume = 0.8
-clickSound.Parent = frame
-
-local function playClick()
-    clickSound:Play()
-end
-
--- ====== وظائف الأزرار ======
-
+-- ✅ وظائف الأزرار
 closeBtn.MouseButton1Click:Connect(function()
-    playClick()
-    screenGui:Destroy()
+	playClick()
+	screenGui:Destroy()
 end)
 
 local isMinimized = false
 local originalSize = frame.Size
 local originalChildren = {}
 
--- اجمع الأطفال الذين سنخفيهم عند التصغير (باستثناء العنوان والأزرار العلوية)
 for _, child in ipairs(frame:GetChildren()) do
-    if child ~= title and child ~= closeBtn and child ~= minimizeBtn then
-        table.insert(originalChildren, child)
-    end
+	if child ~= title and child ~= closeBtn and child ~= minimizeBtn then
+		table.insert(originalChildren, child)
+	end
 end
 
-minimizeBtn.MouseButton1Click:Connect(function()
+minimizeBtn.MouseButton1Click:minimizeBtn.MouseButton1Click:Connect(function()
     playClick()
     isMinimized = not isMinimized
     if isMinimized then
@@ -183,14 +232,15 @@ setBlockBtn.MouseButton1Click:Connect(function()
     if not char then infoLabel.Text = "لا توجد شخصية!" return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then infoLabel.Text = "لا يوجد HumanoidRootPart!" return end
+
     local params = RaycastParams.new()
     params.FilterDescendantsInstances = {char}
     params.FilterType = Enum.RaycastFilterType.Blacklist
-    local ray = Workspace:Raycast(hrp.Position, Vector3.new(0, -500, 0), params)
+    local ray = workspace:Raycast(hrp.Position, Vector3.new(0, -500, 0), params)
     if ray and ray.Instance and ray.Instance:IsA("BasePart") then
         savedPart = ray.Instance
         savedCFrame = nil
-        infoLabel.Text = "تم حفظ البلكة: ".. (savedPart.Name or "Part")
+        infoLabel.Text = "تم حفظ البلكة: " .. (savedPart.Name or "Part")
     else
         infoLabel.Text = "لم أجد بلكة تحتك."
     end
@@ -202,7 +252,8 @@ tpBtn.MouseButton1Click:Connect(function()
     if not char then infoLabel.Text = "لا توجد شخصية!" return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then infoLabel.Text = "لا يوجد HumanoidRootPart!" return end
-    if savedPart and savedPart:IsDescendantOf(Workspace) and savedPart:IsA("BasePart") then
+
+    if savedPart and savedPart:IsDescendantOf(workspace) and savedPart:IsA("BasePart") then
         local topOffset = (savedPart.Size.Y / 2) + 3
         hrp.CFrame = savedPart.CFrame + Vector3.new(0, topOffset, 0)
         local humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -210,6 +261,7 @@ tpBtn.MouseButton1Click:Connect(function()
         infoLabel.Text = "تم إرجاعك إلى البلكة المحفوظة."
         return
     end
+
     if savedCFrame then
         hrp.CFrame = savedCFrame + Vector3.new(0, 3, 0)
         local humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -217,6 +269,7 @@ tpBtn.MouseButton1Click:Connect(function()
         infoLabel.Text = "تم إرجاعك إلى CFrame المحفوظ."
         return
     end
+
     infoLabel.Text = "لا يوجد موقع محفوظ للتليبورت."
 end)
 
@@ -233,7 +286,7 @@ local dragStartPos = nil
 local frameStartPos = nil
 
 local function clampFramePosition(x,y)
-    local cam = Workspace.CurrentCamera
+    local cam = workspace.CurrentCamera
     local screenSize = Vector2.new(1920,1080)
     if cam then screenSize = cam.ViewportSize end
     x = math.clamp(x, 0, screenSize.X - frame.Size.X.Offset)
@@ -250,6 +303,7 @@ local function updateDragFromPosition(currentPos)
     frame.Position = UDim2.new(0, newX, 0, newY)
 end
 
+-- بداية اللمس / السحب
 frame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
@@ -281,11 +335,11 @@ end)
 
 -- ====== التعامل مع ReturnArea(s) ======
 local function getReturnParts()
-    local p = Workspace:FindFirstChild("ReturnArea")
+    local p = workspace:FindFirstChild("ReturnArea")
     if p and p:IsA("BasePart") then
         return {p}
     end
-    local folder = Workspace:FindFirstChild("ReturnAreas")
+    local folder = workspace:FindFirstChild("ReturnAreas")
     if folder and folder:IsA("Folder") then
         local parts = {}
         for _, v in ipairs(folder:GetChildren()) do
@@ -321,7 +375,7 @@ local function attachReturnTouch(part)
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        if savedPart and savedPart:IsDescendantOf(Workspace) and savedPart:IsA("BasePart") then
+        if savedPart and savedPart:IsDescendantOf(workspace) and savedPart:IsA("BasePart") then
             local topOffset = (savedPart.Size.Y / 2) + 3
             hrp.CFrame = savedPart.CFrame + Vector3.new(0, topOffset, 0)
         elseif savedCFrame then
@@ -334,6 +388,7 @@ local function attachReturnTouch(part)
     end)
 end
 
+-- إرفاق للأجزاء الموجودة الآن
 local parts = getReturnParts()
 if #parts == 0 then
     warn("ReturnOneFile: لم أجد ReturnArea أو ReturnAreas في Workspace. أنشئ Part باسم 'ReturnArea' أو Folder باسم 'ReturnAreas' يحتوي Parts.")
@@ -341,7 +396,8 @@ else
     for _, p in ipairs(parts) do attachReturnTouch(p) end
 end
 
-Workspace.ChildAdded:Connect(function(child)
+-- رصد إضافة أولاد إلى ال Workspace
+workspace.ChildAdded:Connect(function(child)
     if child.Name == "ReturnArea" and child:IsA("BasePart") then
         attachReturnTouch(child)
     elseif child.Name == "ReturnAreas" and child:IsA("Folder") then
@@ -353,7 +409,8 @@ Workspace.ChildAdded:Connect(function(child)
     end
 end)
 
-local returnFolder = Workspace:FindFirstChild("ReturnAreas")
+-- رصد إضافة أجزاء لمجلد ReturnAreas لو كان موجودًا
+local returnFolder = workspace:FindFirstChild("ReturnAreas")
 if returnFolder and returnFolder:IsA("Folder") then
     returnFolder.ChildAdded:Connect(function(child)
         if child:IsA("BasePart") then
@@ -361,3 +418,5 @@ if returnFolder and returnFolder:IsA("Folder") then
         end
     end)
 end
+
+-- نهاية السكربت
