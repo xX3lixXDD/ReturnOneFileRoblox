@@ -1,8 +1,10 @@
 -- ReturnOneFile.client.lua
--- سكربت واحد (LocalScript):
--- 1) يخلق GUI قابل للسحب (Desktop + Mobile)
--- 2) يرسل/يخزن CFrame محلياً (Set Return)
--- 3) يستمع للأجزاء ReturnArea أو مجلد ReturnAreas ويعيد اللاعب عند الملامسة
+-- LocalScript
+-- ميزات:
+-- 1) GUI قابل للسحب (Desktop + Mobile)
+-- 2) حفظ CFrame أو حفظ الـ Part تحت اللاعب (Block under player) عبر Raycast
+-- 3) يستمع لأجزاء ReturnArea/ReturnAreas ويعيد اللاعب عند اللمس
+-- 4) زر "Teleport Now" و "Clear"
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -11,24 +13,25 @@ local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- ====== إعداد الحالة المحلية ======
-local savedCFrame = nil -- الموقع الذي سيتم العودة إليه (محلي)
+-- حالات محفوظة
+local savedCFrame = nil
+local savedPart = nil -- إذا حفظنا البلكة تحت اللاعب (Instance)
+local touchedDebounces = {}
 
--- ====== إنشاء GUI (قابل للسحب على الموبايل والكمبيوتر) ======
+-- ====== UI ======
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ReturnGuiSingle"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
--- على بعض الحالات قد تحتاج: screenGui.IgnoreGuiInset = true
 
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 300, 0, 140)
+frame.Size = UDim2.new(0, 320, 0, 180)
 frame.Position = UDim2.new(0, 20, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(34,34,34)
 frame.BorderSizePixel = 0
 frame.AnchorPoint = Vector2.new(0,0)
-frame.Active = true -- مهم للـ Touch
+frame.Active = true
 frame.Parent = screenGui
 
 local title = Instance.new("TextLabel")
@@ -43,18 +46,48 @@ title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = frame
 
 local setBtn = Instance.new("TextButton")
-setBtn.Size = UDim2.new(0, 150, 0, 40)
+setBtn.Size = UDim2.new(0, 150, 0, 36)
 setBtn.Position = UDim2.new(0, 8, 0, 48)
 setBtn.BackgroundColor3 = Color3.fromRGB(50,150,50)
 setBtn.TextColor3 = Color3.fromRGB(255,255,255)
 setBtn.Font = Enum.Font.SourceSans
-setBtn.TextSize = 18
+setBtn.TextSize = 16
 setBtn.Text = "Set Return (My Pos)"
 setBtn.Parent = frame
 
+local setBlockBtn = Instance.new("TextButton")
+setBlockBtn.Size = UDim2.new(0, 150, 0, 36)
+setBlockBtn.Position = UDim2.new(0, 164, 0, 48)
+setBlockBtn.BackgroundColor3 = Color3.fromRGB(60,120,200)
+setBlockBtn.TextColor3 = Color3.fromRGB(255,255,255)
+setBlockBtn.Font = Enum.Font.SourceSans
+setBlockBtn.TextSize = 16
+setBlockBtn.Text = "Save Block Under Me"
+setBlockBtn.Parent = frame
+
+local tpBtn = Instance.new("TextButton")
+tpBtn.Size = UDim2.new(0, 150, 0, 36)
+tpBtn.Position = UDim2.new(0, 8, 0, 92)
+tpBtn.BackgroundColor3 = Color3.fromRGB(180,120,30)
+tpBtn.TextColor3 = Color3.fromRGB(255,255,255)
+tpBtn.Font = Enum.Font.SourceSans
+tpBtn.TextSize = 16
+tpBtn.Text = "Teleport Now"
+tpBtn.Parent = frame
+
+local clearBtn = Instance.new("TextButton")
+clearBtn.Size = UDim2.new(0, 150, 0, 36)
+clearBtn.Position = UDim2.new(0, 164, 0, 92)
+clearBtn.BackgroundColor3 = Color3.fromRGB(140,40,40)
+clearBtn.TextColor3 = Color3.fromRGB(255,255,255)
+clearBtn.Font = Enum.Font.SourceSans
+clearBtn.TextSize = 16
+clearBtn.Text = "Clear Saved"
+clearBtn.Parent = frame
+
 local infoLabel = Instance.new("TextLabel")
-infoLabel.Size = UDim2.new(1, -16, 0, 28)
-infoLabel.Position = UDim2.new(0, 8, 0, 98)
+infoLabel.Size = UDim2.new(1, -16, 0, 36)
+infoLabel.Position = UDim2.new(0, 8, 0, 140)
 infoLabel.BackgroundTransparency = 1
 infoLabel.TextColor3 = Color3.fromRGB(220,220,220)
 infoLabel.Text = "لم يتم تعيين موقع العودة."
@@ -63,78 +96,129 @@ infoLabel.TextSize = 15
 infoLabel.TextXAlignment = Enum.TextXAlignment.Left
 infoLabel.Parent = frame
 
--- ====== زر التعيين ======
+-- ====== أزرار الوظائف ======
 setBtn.MouseButton1Click:Connect(function()
 	local char = player.Character
-	if not char then
-		infoLabel.Text = "لا توجد شخصية!"
-		return
-	end
+	if not char then infoLabel.Text = "لا توجد شخصية!" return end
 	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then
-		infoLabel.Text = "لا يوجد HumanoidRootPart!"
-		return
-	end
+	if not hrp then infoLabel.Text = "لا يوجد HumanoidRootPart!" return end
 	savedCFrame = hrp.CFrame
-	infoLabel.Text = "تم تعيين موقع العودة."
+	savedPart = nil
+	infoLabel.Text = "تم حفظ الـ CFrame الخاص بك."
 end)
 
--- ====== دعم السحب (Mouse + Touch) ======
-local dragging = false
-local dragInput = nil
-local dragStart = nil
-local startPos = nil
+setBlockBtn.MouseButton1Click:Connect(function()
+	local char = player.Character
+	if not char then infoLabel.Text = "لا توجد شخصية!" return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then infoLabel.Text = "لا يوجد HumanoidRootPart!" return end
 
-local function updateDrag(input)
-	if not dragging or not dragStart or not startPos then return end
-	local currentPos = input.Position
-	local delta = currentPos - dragStart
-	local newX = startPos.X.Offset + delta.X
-	local newY = startPos.Y.Offset + delta.Y
-	-- حدود الشاشة
-	local cam = workspace.CurrentCamera
-	local screenSize = cam and cam.ViewportSize or Vector2.new(1920,1080)
-	newX = math.clamp(newX, 0, screenSize.X - frame.Size.X.Offset)
-	newY = math.clamp(newY, 0, screenSize.Y - frame.Size.Y.Offset)
+	-- Raycast لأسفل للعثور على الجزء الذي تحت اللاعب
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {char}
+	params.FilterType = Enum.RaycastFilterType.Blacklist
+	local ray = Workspace:Raycast(hrp.Position, Vector3.new(0, -500, 0), params)
+	if ray and ray.Instance and ray.Instance:IsA("BasePart") then
+		savedPart = ray.Instance
+		savedCFrame = nil
+		infoLabel.Text = "تم حفظ البلكة: ".. (savedPart.Name or "Part")
+	else
+		infoLabel.Text = "لم أجد بلكة تحتك."
+	end
+end)
+
+tpBtn.MouseButton1Click:Connect(function()
+	local char = player.Character
+	if not char then infoLabel.Text = "لا توجد شخصية!" return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then infoLabel.Text = "لا يوجد HumanoidRootPart!" return end
+
+	-- محاولة التليبورت إلى savedPart إذا موجودة وصالحة
+	if savedPart and savedPart:IsDescendantOf(Workspace) and savedPart:IsA("BasePart") then
+		local topOffset = (savedPart.Size.Y / 2) + 3
+		hrp.CFrame = savedPart.CFrame + Vector3.new(0, topOffset, 0)
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if humanoid then humanoid.Sit = false end
+		infoLabel.Text = "تم إرجاعك إلى البلكة المحفوظة."
+		return
+	end
+
+	-- بديل: استخدام savedCFrame
+	if savedCFrame then
+		hrp.CFrame = savedCFrame + Vector3.new(0, 3, 0)
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if humanoid then humanoid.Sit = false end
+		infoLabel.Text = "تم إرجاعك إلى CFrame المحفوظ."
+		return
+	end
+
+	infoLabel.Text = "لا يوجد موقع محفوظ للتليبورت."
+end)
+
+clearBtn.MouseButton1Click:Connect(function()
+	savedPart = nil
+	savedCFrame = nil
+	infoLabel.Text = "تم مسح الموقع المحفوظ."
+end)
+
+-- ====== سحب الـ GUI (دعم Mouse + Touch) ======
+local dragging = false
+local dragStartPos = nil
+local frameStartPos = nil
+
+local function clampFramePosition(x,y)
+	local cam = Workspace.CurrentCamera
+	local screenSize = Vector2.new(1920,1080)
+	if cam then screenSize = cam.ViewportSize end
+	x = math.clamp(x, 0, screenSize.X - frame.Size.X.Offset)
+	y = math.clamp(y, 0, screenSize.Y - frame.Size.Y.Offset)
+	return x, y
+end
+
+local function updateDragFromPosition(currentPos)
+	if not dragging or not dragStartPos or not frameStartPos then return end
+	local delta = currentPos - dragStartPos
+	local newX = frameStartPos.X.Offset + delta.X
+	local newY = frameStartPos.Y.Offset + delta.Y
+	newX, newY = clampFramePosition(newX, newY)
 	frame.Position = UDim2.new(0, newX, 0, newY)
 end
 
 frame.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = true
-		dragStart = input.Position
-		startPos = frame.Position
-		dragInput = input
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-				dragInput = nil
-			end
-		end)
+		if input.Position then
+			dragStartPos = input.Position
+		else
+			dragStartPos = UserInputService:GetMouseLocation()
+		end
+		frameStartPos = frame.Position
 	end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-	if input == dragInput then
-		updateDrag(input)
+	if not dragging then return end
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		local pos = input.Position
+		if not pos then pos = UserInputService:GetMouseLocation() end
+		updateDragFromPosition(pos)
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input == dragInput then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = false
-		dragInput = nil
+		dragStartPos = nil
+		frameStartPos = nil
 	end
 end)
 
--- ====== البحث عن ReturnArea(s) وربط الأحداث محلياً ======
+-- ====== التعامل مع ReturnArea(s) ======
 local function getReturnParts()
-	-- أ) إذا يوجد جزء اسمه ReturnArea (واحد)
 	local p = Workspace:FindFirstChild("ReturnArea")
 	if p and p:IsA("BasePart") then
 		return {p}
 	end
-	-- ب) إذا يوجد مجلد ReturnAreas فيه أجزاء
 	local folder = Workspace:FindFirstChild("ReturnAreas")
 	if folder and folder:IsA("Folder") then
 		local parts = {}
@@ -145,108 +229,69 @@ local function getReturnParts()
 		end
 		return parts
 	end
-	-- ج) لا شيء
 	return {}
 end
 
-local function onTouchedPart(part)
-	-- نتأكد أن اللاعب لم يحفظ موقع العودة بعد؟ لو لم يحفظ نبلّغه
-	if not savedCFrame then
-		infoLabel.Text = "لم تحدد موقع العودة بعد."
-		return
-	end
-	-- التأكد أن اللمس هو من الشخصية المحلية (hit parent هو النموذج الخاص بالشخصية)
-	local function tryTeleport(hit)
+local function attachReturnTouch(part)
+	if not part or not part:IsA("BasePart") then return end
+	if touchedDebounces[part] then return end
+	touchedDebounces[part] = {last = 0}
+
+	part.Touched:Connect(function(hit)
+		if not savedCFrame and not savedPart then
+			infoLabel.Text = "لم تحدد موقع العودة بعد."
+			return
+		end
 		if not hit or not hit.Parent then return end
 		local char = player.Character
 		if not char then return end
-		-- عادة الـ HumanoidRootPart أو أجزاء الشخصية هي التي تلامس، لذا نقارن الـ Parent
-		if hit:FindFirstAncestorOfClass("Model") == char then
-			-- نقل HumanoidRootPart إلى savedCFrame (مع رفع بسيط لتجنب الاصطدام)
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				hrp.CFrame = savedCFrame + Vector3.new(0, 3, 0)
-				-- إلغاء وضع الجلوس لو كان
-				local humanoid = char:FindFirstChildOfClass("Humanoid")
-				if humanoid then humanoid.Sit = false end
-				infoLabel.Text = "تم إرجاعك للموقع."
-			end
+		if not hit:IsDescendantOf(char) then return end
+
+		local now = tick()
+		local db = touchedDebounces[part]
+		if db.last and now - db.last < 1 then return end
+		db.last = now
+
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+
+		-- أولوية للـ savedPart
+		if savedPart and savedPart:IsDescendantOf(Workspace) and savedPart:IsA("BasePart") then
+			local topOffset = (savedPart.Size.Y / 2) + 3
+			hrp.CFrame = savedPart.CFrame + Vector3.new(0, topOffset, 0)
+		elseif savedCFrame then
+			hrp.CFrame = savedCFrame + Vector3.new(0, 3, 0)
 		end
-	end
-	-- نربط حدث Touched على الجزء المحدد
-	part.Touched:Connect(tryTeleport)
+
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if humanoid then humanoid.Sit = false end
+		infoLabel.Text = "تم إرجاعك للموقع."
+	end)
 end
 
--- تشغيل على الأجزاء الحالية (إن وُجدت)
+-- وصل الأجزاء الحالية
 local parts = getReturnParts()
 if #parts == 0 then
 	warn("ReturnOneFile: لم أجد ReturnArea أو ReturnAreas في Workspace. أنشئ Part باسم 'ReturnArea' أو Folder باسم 'ReturnAreas' يحتوي Parts.")
 else
-	for _, p in ipairs(parts) do
-		-- نوصل event محلي لكل جزء (تابع للتأكد)
-		p.Touched:Connect(function(hit) 
-			-- مباشرة نجري الفحص لأن tryTeleport داخلي قد لا يحتاج إلى تعريف منفصل
-			if not savedCFrame then
-				infoLabel.Text = "لم تحدد موقع العودة بعد."
-				return
-			end
-			if not hit or not hit.Parent then return end
-			local char = player.Character
-			if not char then return end
-			if hit:FindFirstAncestorOfClass("Model") == char then
-				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					hrp.CFrame = savedCFrame + Vector3.new(0, 3, 0)
-					local humanoid = char:FindFirstChildOfClass("Humanoid")
-					if humanoid then humanoid.Sit = false end
-					infoLabel.Text = "تم إرجاعك للموقع."
-				end
-			end
-		end)
-	end
+	for _, p in ipairs(parts) do attachReturnTouch(p) end
 end
 
--- إذا تمت إضافة أجزاء لاحقاً أثناء التشغيل، نتعامل معها كذلك
+-- التعامل عند إضافة أجزاء لاحقاً
 Workspace.ChildAdded:Connect(function(child)
 	if child.Name == "ReturnArea" and child:IsA("BasePart") then
-		child.Touched:Connect(function(hit)
-			if not savedCFrame then
-				infoLabel.Text = "لم تحدد موقع العودة بعد."
-				return
-			end
-			if not hit or not hit.Parent then return end
-			if hit:FindFirstAncestorOfClass("Model") == player.Character then
-				local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					hrp.CFrame = savedCFrame + Vector3.new(0, 3, 0)
-					local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-					if humanoid then humanoid.Sit = false end
-					infoLabel.Text = "تم إرجاعك للموقع."
-				end
-			end
-		end)
+		attachReturnTouch(child)
 	elseif child.Name == "ReturnAreas" and child:IsA("Folder") then
 		for _, v in ipairs(child:GetChildren()) do
-			if v:IsA("BasePart") then
-				v.Touched:Connect(function(hit)
-					if not savedCFrame then
-						infoLabel.Text = "لم تحدد موقع العودة بعد."
-						return
-					end
-					if not hit or not hit.Parent then return end
-					if hit:FindFirstAncestorOfClass("Model") == player.Character then
-						local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-						if hrp then
-							hrp.CFrame = savedCFrame + Vector3.new(0, 3, 0)
-							local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-							if humanoid then humanoid.Sit = false end
-							infoLabel.Text = "تم إرجاعك للموقع."
-						end
-					end
-				end)
-			end
+			if v:IsA("BasePart") then attachReturnTouch(v) end
 		end
 	end
 end)
 
--- انتهى السكربت
+-- لو أضيفت أجزاء داخل مجلد موجود
+local returnFolder = Workspace:FindFirstChild("ReturnAreas")
+if returnFolder and returnFolder:IsA("Folder") then
+	returnFolder.ChildAdded:Connect(function(child)
+		if child:IsA("BasePart") then attachReturnTouch(child) end
+	end)
+end
