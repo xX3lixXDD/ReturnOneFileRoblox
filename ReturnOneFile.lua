@@ -1,12 +1,3 @@
--- ReturnOneFile by: xX_3lixXDD
--- LocalScript
--- ميزات:
--- 1) GUI قابل للسحب (Desktop + Mobile)
--- 2) حفظ CFrame أو حفظ الـ Part تحت اللاعب (Block under player) عبر Raycast
--- 3) يستمع لأجزاء ReturnArea/ReturnAreas ويُعيد اللاعب عند اللمس
--- 4) زر "Teleport Now" و "Clear"
--- 5) زِرّان: إغلاق وتصغير، مع مؤثر صوتي عند الضغط
-
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
@@ -15,12 +6,10 @@ local SoundService = game:GetService("SoundService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- حالات محفوظة
 local savedCFrame = nil
 local savedPart = nil
 local touchedDebounces = {}
 
--- ====== UI ======
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ReturnGuiSingle"
 screenGui.ResetOnSpawn = false
@@ -36,7 +25,6 @@ frame.AnchorPoint = Vector2.new(0,0)
 frame.Active = true
 frame.Parent = screenGui
 
--- العنوان
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -16, 0, 30)
 title.Position = UDim2.new(0, 8, 0, 8)
@@ -48,7 +36,6 @@ title.TextSize = 18
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = frame
 
--- زر الإغلاق (X) باللون الأحمر
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 24, 0, 24)
 closeBtn.Position = UDim2.new(1, -28, 0, 8)
@@ -59,7 +46,6 @@ closeBtn.Font = Enum.Font.SourceSansBold
 closeBtn.TextSize = 18
 closeBtn.Parent = frame
 
--- زر التصغير (-) باللون الأحمر
 local minimizeBtn = Instance.new("TextButton")
 minimizeBtn.Size = UDim2.new(0, 24, 0, 24)
 minimizeBtn.Position = UDim2.new(1, -56, 0, 8)
@@ -70,7 +56,6 @@ minimizeBtn.Font = Enum.Font.SourceSansBold
 minimizeBtn.TextSize = 18
 minimizeBtn.Parent = frame
 
--- الأزرار الأساسية
 local setBtn = Instance.new("TextButton")
 setBtn.Size = UDim2.new(0, 150, 0, 36)
 setBtn.Position = UDim2.new(0, 8, 0, 48)
@@ -116,23 +101,20 @@ infoLabel.Size = UDim2.new(1, -16, 0, 36)
 infoLabel.Position = UDim2.new(0, 8, 0, 140)
 infoLabel.BackgroundTransparency = 1
 infoLabel.TextColor3 = Color3.fromRGB(220,220,220)
-infoLabel.Text = "لم يتم تعيين موقع العودة."
+infoLabel.Text = "No return location set."
 infoLabel.Font = Enum.Font.SourceSans
 infoLabel.TextSize = 15
 infoLabel.TextXAlignment = Enum.TextXAlignment.Left
 infoLabel.Parent = frame
 
--- ====== مؤثر الصوت ======
 local clickSound = Instance.new("Sound")
-clickSound.SoundId = "rbxassetid://2101148"  -- مثال: صوت نقر بسيط (يمكن تغييره)
+clickSound.SoundId = "rbxassetid://2101148"
 clickSound.Volume = 0.8
 clickSound.Parent = frame
 
 local function playClick()
     clickSound:Play()
 end
-
--- ====== وظائف الأزرار ======
 
 closeBtn.MouseButton1Click:Connect(function()
     playClick()
@@ -143,7 +125,6 @@ local isMinimized = false
 local originalSize = frame.Size
 local originalChildren = {}
 
--- اجمع الأطفال الذين سنخفيهم عند التصغير (باستثناء العنوان والأزرار العلوية)
 for _, child in ipairs(frame:GetChildren()) do
     if child ~= title and child ~= closeBtn and child ~= minimizeBtn then
         table.insert(originalChildren, child)
@@ -169,20 +150,20 @@ end)
 setBtn.MouseButton1Click:Connect(function()
     playClick()
     local char = player.Character
-    if not char then infoLabel.Text = "لا توجد شخصية!" return end
+    if not char then infoLabel.Text = "No character found!" return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then infoLabel.Text = "لا يوجد HumanoidRootPart!" return end
+    if not hrp then infoLabel.Text = "No HumanoidRootPart found!" return end
     savedCFrame = hrp.CFrame
     savedPart = nil
-    infoLabel.Text = "تم حفظ الـ CFrame الخاص بك."
+    infoLabel.Text = "CFrame position saved."
 end)
 
 setBlockBtn.MouseButton1Click:Connect(function()
     playClick()
     local char = player.Character
-    if not char then infoLabel.Text = "لا توجد شخصية!" return end
+    if not char then infoLabel.Text = "No character found!" return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then infoLabel.Text = "لا يوجد HumanoidRootPart!" return end
+    if not hrp then infoLabel.Text = "No HumanoidRootPart found!" return end
     local params = RaycastParams.new()
     params.FilterDescendantsInstances = {char}
     params.FilterType = Enum.RaycastFilterType.Blacklist
@@ -190,44 +171,43 @@ setBlockBtn.MouseButton1Click:Connect(function()
     if ray and ray.Instance and ray.Instance:IsA("BasePart") then
         savedPart = ray.Instance
         savedCFrame = nil
-        infoLabel.Text = "تم حفظ البلكة: ".. (savedPart.Name or "Part")
+        infoLabel.Text = "Saved block: ".. (savedPart.Name or "Part")
     else
-        infoLabel.Text = "لم أجد بلكة تحتك."
+        infoLabel.Text = "No block found under you."
     end
 end)
 
 tpBtn.MouseButton1Click:Connect(function()
     playClick()
     local char = player.Character
-    if not char then infoLabel.Text = "لا توجد شخصية!" return end
+    if not char then infoLabel.Text = "No character found!" return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then infoLabel.Text = "لا يوجد HumanoidRootPart!" return end
+    if not hrp then infoLabel.Text = "No HumanoidRootPart found!" return end
     if savedPart and savedPart:IsDescendantOf(Workspace) and savedPart:IsA("BasePart") then
         local topOffset = (savedPart.Size.Y / 2) + 3
         hrp.CFrame = savedPart.CFrame + Vector3.new(0, topOffset, 0)
         local humanoid = char:FindFirstChildOfClass("Humanoid")
         if humanoid then humanoid.Sit = false end
-        infoLabel.Text = "تم إرجاعك إلى البلكة المحفوظة."
+        infoLabel.Text = "Returned to saved block."
         return
     end
     if savedCFrame then
         hrp.CFrame = savedCFrame + Vector3.new(0, 3, 0)
         local humanoid = char:FindFirstChildOfClass("Humanoid")
         if humanoid then humanoid.Sit = false end
-        infoLabel.Text = "تم إرجاعك إلى CFrame المحفوظ."
+        infoLabel.Text = "Returned to saved CFrame."
         return
     end
-    infoLabel.Text = "لا يوجد موقع محفوظ للتليبورت."
+    infoLabel.Text = "No saved location to teleport to."
 end)
 
 clearBtn.MouseButton1Click:Connect(function()
     playClick()
     savedPart = nil
     savedCFrame = nil
-    infoLabel.Text = "تم مسح الموقع المحفوظ."
+    infoLabel.Text = "Saved location cleared."
 end)
 
--- ====== سحب الـ GUI (دعم Mouse + Touch) ======
 local dragging = false
 local dragStartPos = nil
 local frameStartPos = nil
@@ -279,7 +259,6 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- ====== التعامل مع ReturnArea(s) ======
 local function getReturnParts()
     local p = Workspace:FindFirstChild("ReturnArea")
     if p and p:IsA("BasePart") then
@@ -305,7 +284,7 @@ local function attachReturnTouch(part)
 
     part.Touched:Connect(function(hit)
         if not savedCFrame and not savedPart then
-            infoLabel.Text = "لم تحدد موقع العودة بعد."
+            infoLabel.Text = "No return location set."
             return
         end
         if not hit or not hit.Parent then return end
@@ -330,13 +309,13 @@ local function attachReturnTouch(part)
 
         local humanoid = char:FindFirstChildOfClass("Humanoid")
         if humanoid then humanoid.Sit = false end
-        infoLabel.Text = "تم إرجاعك للموقع."
+        infoLabel.Text = "Returned to saved location."
     end)
 end
 
 local parts = getReturnParts()
 if #parts == 0 then
-    warn("ReturnOneFile: لم أجد ReturnArea أو ReturnAreas في Workspace. أنشئ Part باسم 'ReturnArea' أو Folder باسم 'ReturnAreas' يحتوي Parts.")
+    warn("ReturnOneFile: No 'ReturnArea' or 'ReturnAreas' found in Workspace. Create a Part named 'ReturnArea' or a Folder named 'ReturnAreas' containing Parts.")
 else
     for _, p in ipairs(parts) do attachReturnTouch(p) end
 end
